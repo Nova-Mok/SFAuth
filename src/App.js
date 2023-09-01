@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { salesforceConfig } from './config';
+import { salesforceConfig, salesforceConfigRefresh } from './config';
 
 function App() {
   const [accessToken, setAccessToken] = useState('');
@@ -8,55 +8,22 @@ function App() {
   const [data, setData] = useState('');
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-
-    if (code) {
-      getAccessToken(code);
-    } else if (refreshToken) {
-      refreshTokenFlow();
+    const urlParams = new URLSearchParams(window.location.hash.substring(1));
+    const token = urlParams.get('access_token');
+    const refreshToken = urlParams.get('refresh_token');
+    if (token) {
+      setAccessToken(token);
     }
-  }, [refreshToken]);
-
-  const authUrl = `https://login.salesforce.com/services/oauth2/authorize?client_id=${salesforceConfig.clientId}&redirect_uri=${encodeURIComponent(salesforceConfig.redirectUri)}&response_type=${salesforceConfig.responseType}&scope=${encodeURIComponent(salesforceConfig.scope)}`;
-
-  const getAccessToken = async (code) => {
-    try {
-      const response = await axios.post('https://login.salesforce.com/services/oauth2/token', null, {
-        params: {
-          grant_type: 'authorization_code',
-          client_id: salesforceConfig.clientId,
-          client_secret: salesforceConfig.clientSecret,
-          redirect_uri: salesforceConfig.redirectUri,
-          code: code,
-        },
-      });
-      setAccessToken(response.data.access_token);
-      setRefreshToken(response.data.refresh_token);
-    } catch (error) {
-      console.error('Error getting access token:', error);
+    if (refreshToken) {
+      setRefreshToken(refreshToken);
     }
-  };
+  }, []);
 
-  const refreshTokenFlow = async () => {
-    try {
-      const response = await axios.post('https://login.salesforce.com/services/oauth2/token', null, {
-        params: {
-          grant_type: 'refresh_token',
-          client_id: salesforceConfig.clientId,
-          client_secret: salesforceConfig.clientSecret,
-          refresh_token: refreshToken,
-        },
-      });
-      setAccessToken(response.data.access_token);
-    } catch (error) {
-      console.error('Error refreshing access token:', error);
-    }
-  };
+  const authUrl = `https://login.salesforce.com/services/oauth2/authorize?client_id=${salesforceConfigRefresh.clientId}&redirect_uri=${encodeURIComponent(salesforceConfigRefresh.redirectUri)}&response_type=${salesforceConfigRefresh.responseType}&scope=${encodeURIComponent(salesforceConfigRefresh.scope)}`;
 
   const fetchData = async () => {
     try {
-      const response = await axios.get('https://boostup.my.salesforce.com/services/data/v54.0/query/?q=SELECT+Name,Id,AccountId,CloseDate,Amount,+StageName,Probability,Type+FROM+Opportunity', {
+      const response = await axios.get('https://login.salesforce.com/services/data/v54.0/query/?q=SELECT+Name,Id,AccountId,CloseDate,Amount,+StageName,Probability,Type+FROM+Opportunity', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -67,6 +34,22 @@ function App() {
     }
   };
 
+  const refreshAccessToken = async () => {
+    try {
+      const response = await axios.post('https://login.salesforce.com/services/oauth2/token', null, {
+        params: {
+          grant_type: 'refresh_token',
+          client_id: salesforceConfigRefresh.clientId,
+          refresh_token: refreshToken,
+        },
+      });
+      const newAccessToken = response.data.access_token;
+      setAccessToken(newAccessToken);
+    } catch (error) {
+      console.error('Error refreshing access token:', error);
+    }
+  };
+
   return (
     <div className="App">
       {!accessToken ? (
@@ -74,7 +57,10 @@ function App() {
       ) : (
         <div>
           <p>Access Token: {accessToken}</p>
+          <p>Refresh Token: {refreshToken}</p>
           <button onClick={fetchData}>Fetch Data</button>
+          <div> </div>
+          <button onClick={refreshAccessToken}>Refresh Access Token</button>
           <pre>{JSON.stringify(data, null, 2)}</pre>
         </div>
       )}
